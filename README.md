@@ -66,10 +66,6 @@ git clone <repository-url>
 cd gh-smart-commit
 go build -o gh-smart-commit .
 
-# Or install directly (when published)
-go install github.com/your-username/gh-smart-commit@latest
-```
-
 ### 🎬 Your First AI Commit
 
 ```bash
