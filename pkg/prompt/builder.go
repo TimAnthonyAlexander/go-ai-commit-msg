@@ -17,20 +17,27 @@ type Template struct {
 
 // Context holds the context data for prompt templates
 type Context struct {
-	Repo       string
-	Branch     string
-	Diff       string
-	Commits    []git.Commit
-	Rules      []string
-	MaxLength  int
-	Style      string
+	Repo      string
+	Branch    string
+	Diff      string
+	Commits   []git.Commit
+	Rules     []string
+	MaxLength int
+	Style     string
 }
 
 // SmartCommitTemplate is the prompt template for generating commit messages
 var SmartCommitTemplate = Template{
 	System: `You are an expert software engineer skilled in writing clear, concise commit messages following the Conventional Commits standard.
 
-Your task is to analyze Git diffs and generate appropriate commit messages that:
+CRITICAL INSTRUCTIONS:
+- Your response must be ONLY the commit message itself
+- NO explanations, NO additional text, NO context
+- NO phrases like "Here is the commit message:" or "This commit message..."
+- NO quotes around the message unless they are part of the actual commit message
+- Just the raw commit message and nothing else
+
+Requirements for the commit message:
 1. Follow Conventional Commits format: type(scope): description
 2. Use imperative mood (e.g., "add", "fix", "update", not "added", "fixed", "updated")
 3. Keep the first line under 72 characters
@@ -38,7 +45,13 @@ Your task is to analyze Git diffs and generate appropriate commit messages that:
 5. Include scope when relevant (e.g., api, ui, auth, db)
 6. Be descriptive but concise
 
-Respond ONLY with the commit message, no explanations or additional text.`,
+EXAMPLE OUTPUT FORMAT:
+feat(auth): add OAuth2 integration with Google
+fix(api): resolve null pointer error in user validation
+docs: update installation instructions
+refactor(db): optimize query performance
+
+REMEMBER: Output ONLY the commit message. No other text whatsoever.`,
 
 	User: `Repository: {{.Repo}}
 Branch: {{.Branch}}
@@ -51,7 +64,7 @@ Branch: {{.Branch}}
 Diff:
 {{.Diff}}
 
-Generate a conventional commit message for these changes:`,
+Output the commit message only:`,
 }
 
 // LintSuggestionsTemplate is the prompt template for code improvement suggestions
@@ -140,10 +153,10 @@ type Builder struct {
 func NewBuilder() *Builder {
 	return &Builder{
 		templates: map[string]Template{
-			"smart-commit":      SmartCommitTemplate,
-			"lint-suggestions":  LintSuggestionsTemplate,
-			"branch-describe":   BranchDescribeTemplate,
-			"tag-suggest":       TagSuggestTemplate,
+			"smart-commit":     SmartCommitTemplate,
+			"lint-suggestions": LintSuggestionsTemplate,
+			"branch-describe":  BranchDescribeTemplate,
+			"tag-suggest":      TagSuggestTemplate,
 		},
 	}
 }
@@ -229,4 +242,4 @@ func SanitizeCommitMessage(message string) string {
 	}
 
 	return strings.TrimSpace(message)
-} 
+}
