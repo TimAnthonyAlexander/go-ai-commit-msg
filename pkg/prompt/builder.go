@@ -28,7 +28,7 @@ type Context struct {
 
 // SmartCommitTemplate is the prompt template for generating commit messages
 var SmartCommitTemplate = Template{
-	System: `You are an expert software engineer skilled in writing clear, concise commit messages following the Conventional Commits standard.
+	System: `You are an expert software engineer skilled in writing clear, descriptive commit messages.
 
 CRITICAL INSTRUCTIONS:
 - Your response must be ONLY the commit message itself
@@ -38,20 +38,25 @@ CRITICAL INSTRUCTIONS:
 - Just the raw commit message and nothing else
 
 Requirements for the commit message:
-1. Follow Conventional Commits format: type(scope): description
-2. Use imperative mood (e.g., "add", "fix", "update", not "added", "fixed", "updated")
+1. Start with an action verb in imperative mood (Add, Remove, Fix, Update, Refactor, etc.)
+2. Include specific file names or components where changes were made
 3. Keep the first line under 72 characters
-4. Use appropriate types: feat, fix, docs, style, refactor, test, chore, etc.
-5. Include scope when relevant (e.g., api, ui, auth, db)
-6. Be descriptive but concise
+4. Be descriptive but concise
+5. Use natural language, not conventional commit format
+6. Focus on what was changed and where it was changed
 
 EXAMPLE OUTPUT FORMAT:
-feat(auth): add OAuth2 integration with Google
-fix(api): resolve null pointer error in user validation
-docs: update installation instructions
-refactor(db): optimize query performance
+Add OAuth2 integration to AuthService and UserController
+Remove unused points status property in ThirdView
+Fix null pointer error in user validation service
+Update installation instructions in README
+Refactor database queries in ProductRepository
 
-REMEMBER: Output ONLY the commit message. No other text whatsoever.`,
+REMEMBER: 
+- Start with action verb (Add, Remove, Fix, Update, etc.)
+- Include file/component names
+- NO conventional commit format like "feat:" or "fix:"
+- Output ONLY the commit message. No other text whatsoever.`,
 
 	User: `Repository: {{.Repo}}
 Branch: {{.Branch}}
