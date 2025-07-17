@@ -43,7 +43,7 @@ func NewLocalRepo(workDir string) *LocalRepo {
 
 // GetStagedDiff returns the staged changes
 func (r *LocalRepo) GetStagedDiff(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--cached", "--no-pager")
+	cmd := exec.CommandContext(ctx, "git", "--no-pager", "diff", "--cached")
 	cmd.Dir = r.workDir
 
 	output, err := cmd.Output()
@@ -56,7 +56,7 @@ func (r *LocalRepo) GetStagedDiff(ctx context.Context) (string, error) {
 
 // GetUnstagedDiff returns the unstaged changes
 func (r *LocalRepo) GetUnstagedDiff(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "diff", "--no-pager")
+	cmd := exec.CommandContext(ctx, "git", "--no-pager", "diff")
 	cmd.Dir = r.workDir
 
 	output, err := cmd.Output()
@@ -144,7 +144,7 @@ func (r *LocalRepo) GetRecentCommits(ctx context.Context, count int) ([]Commit, 
 		}
 
 		// Get file stats for this commit
-		statsCmd := exec.CommandContext(ctx, "git", "show", "--stat", "--format=", commit.Hash)
+		statsCmd := exec.CommandContext(ctx, "git", "--no-pager", "show", "--stat", "--format=", commit.Hash)
 		statsCmd.Dir = r.workDir
 
 		statsOutput, err := statsCmd.Output()
