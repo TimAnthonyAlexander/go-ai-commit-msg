@@ -1,0 +1,50 @@
+# Example configuration file for gh-smart-commit
+# Copy this to ~/.config/gh-smart-commit.yaml and customize as needed
+
+# Ollama settings
+ollama:
+  host: "127.0.0.1:11434"  # Ollama server host:port
+  model: "llama3:8b"       # Model to use for AI generation
+  temperature: 0.3         # Temperature for model output (0.0-1.0)
+
+# Global settings
+verbose: false             # Enable verbose output
+
+# Command-specific settings
+smart-commit:
+  max-diff-lines: 500     # Maximum diff lines to include in prompt
+  rules:                  # Custom rules for commit messages
+    - "Commit title max 72 chars"
+    - "Use imperative mood"
+    - "Follow Conventional Commits standard"
+    - "Be descriptive but concise"
+
+lint-suggestions:
+  severity: "all"         # Filter by severity: all, high, medium, low
+  max-suggestions: 10     # Maximum suggestions to display
+
+branch-describe:
+  commits: 10             # Number of recent commits to analyze
+  base-branch: "main"     # Base branch to compare against
+  include-stats: true     # Include diff statistics in analysis
+
+tag-suggest:
+  max-tags: 5             # Maximum number of tags to suggest
+  validate-only: false    # Only suggest from allowed tags list
+  include-auto: true      # Include automatically detected tags
+  allowed-tags:           # Predefined list of allowed tags
+    - "frontend"
+    - "backend"
+    - "api"
+    - "ui"
+    - "database"
+    - "auth"
+    - "security"
+    - "performance"
+    - "bugfix"
+    - "feature"
+    - "refactor"
+    - "docs"
+    - "test"
+    - "ci"
+    - "config" 

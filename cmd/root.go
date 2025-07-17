@@ -37,7 +37,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.config/gh-smart-commit.yaml)")
 	rootCmd.PersistentFlags().String("ollama-host", "127.0.0.1:11434", "Ollama server host:port")
 	rootCmd.PersistentFlags().String("model", "llama3:8b", "Ollama model to use")
-	rootCmd.PersistentFlags().Float32("temperature", 0.3, "Model temperature (0.0-1.0)")
+	rootCmd.PersistentFlags().Float64("temperature", 0.3, "Model temperature (0.0-1.0)")
 	rootCmd.PersistentFlags().Bool("verbose", false, "Enable verbose output")
 
 	// Bind flags to viper
@@ -73,4 +73,4 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err == nil && viper.GetBool("verbose") {
 		fmt.Fprintf(os.Stderr, "Using config file: %s\n", viper.ConfigFileUsed())
 	}
-} 
+}
