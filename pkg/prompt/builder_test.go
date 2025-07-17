@@ -3,8 +3,6 @@ package prompt
 import (
 	"strings"
 	"testing"
-
-	"gh-smart-commit/pkg/git"
 )
 
 func TestNewBuilder(t *testing.T) {
@@ -113,7 +111,7 @@ func TestValidateCommitMessage(t *testing.T) {
 		{"docs: update README", false},
 		{"", true}, // empty message
 		{"this is a very long commit message that exceeds the 72 character limit for the first line", true}, // too long
-		{"missing colon in conventional format", true}, // no colon
+		{"missing colon in conventional format", true},                                                      // no colon
 	}
 
 	for _, tt := range tests {
@@ -143,4 +141,4 @@ func TestSanitizeCommitMessage(t *testing.T) {
 			t.Errorf("SanitizeCommitMessage(%q) = %q, expected %q", tt.input, result, tt.expected)
 		}
 	}
-} 
+}

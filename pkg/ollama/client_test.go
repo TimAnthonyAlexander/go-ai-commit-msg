@@ -82,11 +82,7 @@ func TestChat(t *testing.T) {
 				Done:    false,
 			},
 			{
-				Message: Message{Content: " world"},
-				Done:    false,
-			},
-			{
-				Message: Message{Content: "!"},
+				Message: Message{Content: " world!"},
 				Done:    true,
 			},
 		}
@@ -139,8 +135,8 @@ Complete:
 		t.Errorf("Chat failed: %v", streamErr)
 	}
 
-	if len(responses) != 3 {
-		t.Errorf("Expected 3 responses, got %d", len(responses))
+	if len(responses) != 2 {
+		t.Errorf("Expected 2 responses, got %d", len(responses))
 	}
 
 	// Check that we got the expected content
@@ -158,4 +154,4 @@ Complete:
 	if !responses[len(responses)-1].Done {
 		t.Error("Expected last response to be marked as done")
 	}
-} 
+}
