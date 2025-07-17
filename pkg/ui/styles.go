@@ -9,16 +9,31 @@ import (
 )
 
 var (
-	// Color palette - minimalist, Apple-esque
-	primaryColor    = lipgloss.Color("#007AFF") // Blue
-	successColor    = lipgloss.Color("#34C759") // Green
-	warningColor    = lipgloss.Color("#FF9500") // Orange
-	errorColor      = lipgloss.Color("#FF3B30") // Red
-	mutedColor      = lipgloss.Color("#8E8E93") // Gray
-	backgroundColor = lipgloss.Color("#F2F2F7") // Light gray
-	surfaceColor    = lipgloss.Color("#FFFFFF") // White
-	textColor       = lipgloss.Color("#1C1C1E") // Dark
-	accentColor     = lipgloss.Color("#5856D6") // Purple
+	// Color palette - terminal-adaptive colors that work on both light and dark backgrounds
+	primaryColor = lipgloss.Color("#007AFF") // Blue
+	successColor = lipgloss.Color("#34C759") // Green
+	warningColor = lipgloss.Color("#FF9500") // Orange
+	errorColor   = lipgloss.Color("#FF3B30") // Red
+	mutedColor   = lipgloss.Color("#8E8E93") // Gray
+	accentColor  = lipgloss.Color("#5856D6") // Purple
+
+	// Use adaptive colors that work on any background
+	adaptiveTextColor = lipgloss.AdaptiveColor{
+		Light: "#1C1C1E", // Dark text on light background
+		Dark:  "#FFFFFF", // White text on dark background
+	}
+	adaptiveMutedColor = lipgloss.AdaptiveColor{
+		Light: "#8E8E93", // Gray on light background
+		Dark:  "#98989D", // Lighter gray on dark background
+	}
+	adaptiveBackgroundColor = lipgloss.AdaptiveColor{
+		Light: "#FFFFFF", // White on light terminals
+		Dark:  "#1C1C1E", // Dark on dark terminals
+	}
+	adaptiveBorderColor = lipgloss.AdaptiveColor{
+		Light: "#E5E5EA", // Light gray border on light background
+		Dark:  "#38383A", // Dark gray border on dark background
+	}
 )
 
 // Base styles
@@ -26,23 +41,23 @@ var (
 	// Typography
 	TitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(textColor).
+			Foreground(adaptiveTextColor).
 			PaddingTop(1).
 			PaddingBottom(1)
 
 	SubtitleStyle = lipgloss.NewStyle().
-			Foreground(mutedColor).
+			Foreground(adaptiveMutedColor).
 			PaddingBottom(1)
 
 	BodyStyle = lipgloss.NewStyle().
-			Foreground(textColor)
+			Foreground(adaptiveTextColor)
 
 	// Layout containers
 	ContainerStyle = lipgloss.NewStyle().
 			Padding(1, 2).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(mutedColor).
-			Background(surfaceColor)
+			BorderForeground(adaptiveBorderColor).
+			Foreground(adaptiveTextColor)
 
 	HeaderStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -51,7 +66,7 @@ var (
 			PaddingBottom(1).
 			BorderBottom(true).
 			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(mutedColor)
+			BorderForeground(adaptiveBorderColor)
 
 	// Status styles
 	SuccessStyle = lipgloss.NewStyle().
@@ -70,13 +85,13 @@ var (
 			Foreground(primaryColor)
 
 	MutedStyle = lipgloss.NewStyle().
-			Foreground(mutedColor)
+			Foreground(adaptiveMutedColor)
 
 	// Interactive elements
 	ButtonStyle = lipgloss.NewStyle().
 			Padding(0, 2).
 			Background(primaryColor).
-			Foreground(surfaceColor).
+			Foreground(lipgloss.AdaptiveColor{Light: "#FFFFFF", Dark: "#FFFFFF"}).
 			Bold(true).
 			Border(lipgloss.RoundedBorder())
 
@@ -88,15 +103,14 @@ var (
 
 	// Code and data
 	CodeStyle = lipgloss.NewStyle().
-			Background(backgroundColor).
-			Foreground(textColor).
+			Background(lipgloss.AdaptiveColor{Light: "#F2F2F7", Dark: "#2C2C2E"}).
+			Foreground(adaptiveTextColor).
 			Padding(0, 1).
 			Border(lipgloss.RoundedBorder()).
-			BorderForeground(mutedColor)
+			BorderForeground(adaptiveBorderColor)
 
 	CommitMessageStyle = lipgloss.NewStyle().
-				Background(surfaceColor).
-				Foreground(textColor).
+				Foreground(adaptiveTextColor).
 				Padding(1).
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(primaryColor).
@@ -194,7 +208,7 @@ func RenderBox(title, content string) string {
 func RenderSuccessBox(message string) string {
 	style := ContainerStyle.Copy().
 		BorderForeground(successColor).
-		Background(surfaceColor)
+		Foreground(adaptiveTextColor)
 
 	content := fmt.Sprintf("%s %s",
 		SuccessStyle.Render("✓"),
@@ -207,7 +221,7 @@ func RenderSuccessBox(message string) string {
 func RenderErrorBox(message string) string {
 	style := ContainerStyle.Copy().
 		BorderForeground(errorColor).
-		Background(surfaceColor)
+		Foreground(adaptiveTextColor)
 
 	content := fmt.Sprintf("%s %s",
 		ErrorStyle.Render("✗"),
@@ -220,7 +234,7 @@ func RenderErrorBox(message string) string {
 func RenderWarningBox(message string) string {
 	style := ContainerStyle.Copy().
 		BorderForeground(warningColor).
-		Background(surfaceColor)
+		Foreground(adaptiveTextColor)
 
 	content := fmt.Sprintf("%s %s",
 		WarningStyle.Render("⚠"),
