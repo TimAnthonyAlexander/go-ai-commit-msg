@@ -7,7 +7,7 @@ import (
 	"gh-smart-commit/pkg/git"
 	"gh-smart-commit/pkg/ollama"
 	"gh-smart-commit/pkg/prompt"
-	"os"
+	"gh-smart-commit/pkg/ui"
 	"strings"
 	"time"
 
@@ -60,66 +60,71 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 	// Check if we're in a Git repository
 	isGit, err := repo.IsInsideWorkTree(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check if inside Git repository: %w", err)
+		ui.ShowError("Failed to check if inside Git repository: " + err.Error())
+		return err
 	}
 	if !isGit {
+		ui.ShowError("Not inside a Git repository")
 		return fmt.Errorf("not inside a Git repository")
 	}
 
 	// Get repository context
 	repoName, _ := repo.GetRepoName(ctx)
-	currentBranch, err := repo.GetCurrentBranch(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get current branch: %w", err)
+	currentBranch, _ := repo.GetCurrentBranch(ctx)
+
+	// Show context info if verbose
+	contextFormatter := ui.NewContextFormatter()
+	if info := contextFormatter.FormatRepoInfo(repoName, currentBranch, verbose); info != "" {
+		fmt.Print(info)
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Repository: %s\n", repoName)
-		fmt.Fprintf(os.Stderr, "Current branch: %s\n", currentBranch)
-		fmt.Fprintf(os.Stderr, "Base branch: %s\n", baseBranch)
-		fmt.Fprintf(os.Stderr, "Commits to analyze: %d\n", commitCount)
+		ui.ShowInfo(fmt.Sprintf("Analyzing %d recent commits", commitCount))
+		if baseBranch != "" && baseBranch != currentBranch {
+			ui.ShowInfo(fmt.Sprintf("Comparing against base branch: %s", baseBranch))
+		}
 	}
 
-	// Initialize cache
+	// Set up cache
 	cacheInstance := cache.NewCache(".")
-	cacheKey := cache.GenerateCacheKey(
-		"branch-describe",
-		repoName,
-		currentBranch,
-		baseBranch,
-		fmt.Sprintf("commits-%d", commitCount),
-		fmt.Sprintf("stats-%t", includeStats),
-	)
+	cacheKey := fmt.Sprintf("branch-describe-%s-%d", currentBranch, commitCount)
 
-	// Check cache first (unless --no-cache is specified)
+	// Try to get from cache first
 	if !noCache {
 		if cachedDescription, found, err := cacheInstance.Get(cacheKey); err == nil && found {
 			if verbose {
-				fmt.Fprintf(os.Stderr, "Using cached description\n")
+				ui.ShowInfo("Using cached description")
 			}
 
-			fmt.Printf("📄 Branch Description (cached):\n")
-			fmt.Println("──────────────────────────────")
-			fmt.Printf("%s\n", cachedDescription)
-			fmt.Printf("\n💾 From cache • Use --no-cache to regenerate\n")
+			formatter := ui.NewBranchFormatter()
+			output := formatter.FormatDescription(cachedDescription, true)
+			fmt.Print(output)
 			return nil
 		} else if err != nil && verbose {
-			fmt.Fprintf(os.Stderr, "Cache error (proceeding without cache): %v\n", err)
+			ui.ShowInfo("Cache unavailable, generating fresh description")
 		}
 	}
 
 	// Get recent commits
 	commits, err := repo.GetRecentCommits(ctx, commitCount)
 	if err != nil {
-		return fmt.Errorf("failed to get recent commits: %w", err)
+		ui.ShowError("Failed to get recent commits: " + err.Error())
+		return err
 	}
 
 	if len(commits) == 0 {
+		ui.ShowWarning(fmt.Sprintf("No commits found on branch %s", currentBranch))
 		return fmt.Errorf("no commits found on branch %s", currentBranch)
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Found %d commits\n", len(commits))
+		ui.ShowInfo(fmt.Sprintf("Found %d commits", len(commits)))
+
+		// Show recent commits if very verbose
+		contextFormatter := ui.NewContextFormatter()
+		if commitInfo := contextFormatter.FormatCommitList(commits); commitInfo != "" {
+			fmt.Print(commitInfo)
+		}
 	}
 
 	// Get branch comparison diff if base branch is specified
@@ -129,10 +134,11 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 		if diff, diffErr := getBranchDiff(ctx, repo, baseBranch, currentBranch); diffErr == nil {
 			branchDiff = diff
 			if verbose {
-				fmt.Fprintf(os.Stderr, "Branch diff length: %d lines\n", len(strings.Split(branchDiff, "\n")))
+				diffLines := len(strings.Split(branchDiff, "\n"))
+				ui.ShowInfo(fmt.Sprintf("Branch diff: %d lines", diffLines))
 			}
 		} else if verbose {
-			fmt.Fprintf(os.Stderr, "Could not get branch diff: %v\n", diffErr)
+			ui.ShowWarning("Could not get branch diff: " + diffErr.Error())
 		}
 	}
 
@@ -147,11 +153,12 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 
 	systemPrompt, userPrompt, err := builder.Build("branch-describe", promptCtx)
 	if err != nil {
-		return fmt.Errorf("failed to build prompt: %w", err)
+		ui.ShowError("Failed to build prompt: " + err.Error())
+		return err
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Sending request to Ollama...\n")
+		ui.ShowInfo("Sending request to Ollama...")
 	}
 
 	// Create Ollama client
@@ -164,7 +171,8 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 
 	// Test connection
 	if err := client.Ping(ctx); err != nil {
-		return fmt.Errorf("failed to connect to Ollama at %s: %w", ollamaHost, err)
+		ui.ShowError(fmt.Sprintf("Failed to connect to Ollama at %s: %s", ollamaHost, err.Error()))
+		return err
 	}
 
 	// Prepare chat request
@@ -179,8 +187,10 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Stream response
-	fmt.Print("Generating branch description")
+	// Create beautiful streaming spinner
+	spinner := ui.NewStreamingSpinner("📝 Generating branch description")
+	spinner.Start()
+
 	respChan, errChan := client.Chat(ctx, chatReq)
 
 	var responseBuilder strings.Builder
@@ -192,7 +202,7 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 			if !ok {
 				goto StreamComplete
 			}
-			fmt.Print(".")
+			spinner.Update()
 			responseBuilder.WriteString(resp.Message.Content)
 
 		case err := <-errChan:
@@ -205,14 +215,16 @@ func runBranchDescribe(cmd *cobra.Command, args []string) error {
 	}
 
 StreamComplete:
-	fmt.Println() // New line after dots
+	spinner.Stop()
 
 	if streamErr != nil {
-		return fmt.Errorf("failed to generate branch description: %w", streamErr)
+		ui.ShowError("Failed to generate branch description: " + streamErr.Error())
+		return streamErr
 	}
 
 	description := strings.TrimSpace(responseBuilder.String())
 	if description == "" {
+		ui.ShowWarning("No description generated")
 		return fmt.Errorf("no description generated")
 	}
 
@@ -222,35 +234,21 @@ StreamComplete:
 	// Cache the result (expire after 24 hours)
 	if !noCache {
 		if err := cacheInstance.Set(cacheKey, description, 24*time.Hour); err != nil && verbose {
-			fmt.Fprintf(os.Stderr, "Failed to cache result: %v\n", err)
+			ui.ShowWarning("Failed to cache result: " + err.Error())
 		}
 	}
 
-	// Display the description
-	fmt.Printf("\n📄 Branch Description:\n")
-	fmt.Println("─────────────────────")
-	fmt.Printf("%s\n", description)
+	// Display the description beautifully
+	formatter := ui.NewBranchFormatter()
+	output := formatter.FormatDescription(description, false)
+	fmt.Print(output)
 
-	// Show summary stats
-	if includeStats && len(commits) > 0 {
-		totalFiles := 0
-		totalAdditions := 0
-		totalDeletions := 0
-
-		for _, commit := range commits {
-			totalFiles += len(commit.Files)
-			totalAdditions += commit.Additions
-			totalDeletions += commit.Deletions
+	// Show summary stats if requested
+	if includeStats {
+		if stats := getStatsString(ctx, repo, baseBranch, currentBranch); stats != "" {
+			statsOutput := formatter.FormatStats(stats)
+			fmt.Print(statsOutput)
 		}
-
-		fmt.Printf("\n📊 Branch Statistics:\n")
-		fmt.Printf("• %d commits analyzed\n", len(commits))
-		fmt.Printf("• %d files changed\n", totalFiles)
-		fmt.Printf("• +%d additions, -%d deletions\n", totalAdditions, totalDeletions)
-	}
-
-	if !noCache {
-		fmt.Printf("\n💾 Cached for 24 hours • Use --no-cache to regenerate\n")
 	}
 
 	return nil
@@ -285,4 +283,26 @@ func cleanupDescription(description string) string {
 	}
 
 	return description
+}
+
+// getStatsString generates statistics string for the branch
+func getStatsString(ctx context.Context, repo *git.LocalRepo, baseBranch, currentBranch string) string {
+	// Try to get some basic stats - this is a simplified implementation
+	commits, err := repo.GetRecentCommits(ctx, 20) // Get more commits for stats
+	if err != nil || len(commits) == 0 {
+		return ""
+	}
+
+	totalFiles := 0
+	totalAdditions := 0
+	totalDeletions := 0
+
+	for _, commit := range commits {
+		totalFiles += len(commit.Files)
+		totalAdditions += commit.Additions
+		totalDeletions += commit.Deletions
+	}
+
+	return fmt.Sprintf("%d commits, %d files changed, +%d/-%d lines",
+		len(commits), totalFiles, totalAdditions, totalDeletions)
 }

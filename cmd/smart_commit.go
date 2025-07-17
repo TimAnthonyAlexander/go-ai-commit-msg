@@ -14,6 +14,7 @@ import (
 	"gh-smart-commit/pkg/git"
 	"gh-smart-commit/pkg/ollama"
 	"gh-smart-commit/pkg/prompt"
+	"gh-smart-commit/pkg/ui"
 )
 
 // smartCommitCmd represents the smart-commit command
@@ -56,20 +57,24 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 	// Check if we're in a Git repository
 	isGit, err := repo.IsInsideWorkTree(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check if inside Git repository: %w", err)
+		ui.ShowError("Failed to check if inside Git repository: " + err.Error())
+		return err
 	}
 	if !isGit {
+		ui.ShowError("Not inside a Git repository")
 		return fmt.Errorf("not inside a Git repository")
 	}
 
 	// Get staged diff
 	diff, err := repo.GetStagedDiff(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get staged diff: %w", err)
+		ui.ShowError("Failed to get staged diff: " + err.Error())
+		return err
 	}
 
 	if strings.TrimSpace(diff) == "" {
-		return fmt.Errorf("no staged changes found. Please stage your changes with 'git add' first")
+		ui.ShowWarning("No staged changes found. Please stage your changes with 'git add' first")
+		return fmt.Errorf("no staged changes found")
 	}
 
 	// Truncate diff if too long
@@ -81,10 +86,15 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 	repoName, _ := repo.GetRepoName(ctx)
 	branch, _ := repo.GetCurrentBranch(ctx)
 
+	// Show context info if verbose
+	contextFormatter := ui.NewContextFormatter()
+	if info := contextFormatter.FormatRepoInfo(repoName, branch, verbose); info != "" {
+		fmt.Print(info)
+	}
+
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Repository: %s\n", repoName)
-		fmt.Fprintf(os.Stderr, "Branch: %s\n", branch)
-		fmt.Fprintf(os.Stderr, "Diff length: %d lines\n", len(strings.Split(diff, "\n")))
+		diffLines := len(strings.Split(diff, "\n"))
+		ui.ShowInfo(fmt.Sprintf("Analyzing %d lines of changes", diffLines))
 	}
 
 	// Build prompt
@@ -102,11 +112,12 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 
 	systemPrompt, userPrompt, err := builder.Build("smart-commit", promptCtx)
 	if err != nil {
-		return fmt.Errorf("failed to build prompt: %w", err)
+		ui.ShowError("Failed to build prompt: " + err.Error())
+		return err
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Sending request to Ollama...\n")
+		ui.ShowInfo("Sending request to Ollama...")
 	}
 
 	// Create Ollama client
@@ -119,7 +130,8 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 
 	// Test connection
 	if err := client.Ping(ctx); err != nil {
-		return fmt.Errorf("failed to connect to Ollama at %s: %w", ollamaHost, err)
+		ui.ShowError(fmt.Sprintf("Failed to connect to Ollama at %s: %s", ollamaHost, err.Error()))
+		return err
 	}
 
 	// Prepare chat request
@@ -134,8 +146,10 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Stream response
-	fmt.Print("Generating commit message")
+	// Create beautiful streaming spinner
+	spinner := ui.NewStreamingSpinner("🤖 Generating commit message")
+	spinner.Start()
+
 	respChan, errChan := client.Chat(ctx, chatReq)
 
 	var commitMessage strings.Builder
@@ -148,7 +162,7 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 				// Channel closed, we're done
 				goto StreamComplete
 			}
-			fmt.Print(".")
+			spinner.Update()
 			commitMessage.WriteString(resp.Message.Content)
 
 		case err := <-errChan:
@@ -161,62 +175,64 @@ func runSmartCommit(cmd *cobra.Command, args []string) error {
 	}
 
 StreamComplete:
-	fmt.Println() // New line after dots
+	spinner.Stop()
 
 	if streamErr != nil {
-		return fmt.Errorf("failed to generate commit message: %w", streamErr)
+		ui.ShowError("Failed to generate commit message: " + streamErr.Error())
+		return streamErr
 	}
 
 	// Clean up the generated message
 	message := prompt.SanitizeCommitMessage(commitMessage.String())
 
 	if message == "" {
+		ui.ShowError("Generated commit message is empty")
 		return fmt.Errorf("generated commit message is empty")
 	}
 
 	// Validate the message
 	if err := prompt.ValidateCommitMessage(message); err != nil {
-		fmt.Printf("Warning: %v\n", err)
+		ui.ShowWarning("Validation warning: " + err.Error())
 	}
 
-	// Display the generated message
-	fmt.Printf("\nGenerated commit message:\n")
-	fmt.Printf("─────────────────────────\n")
-	fmt.Printf("%s\n", message)
-	fmt.Printf("─────────────────────────\n")
+	// Display the generated message beautifully
+	formatter := ui.NewCommitMessageFormatter()
+	fmt.Print(formatter.FormatGenerated(message))
 
 	if dryRun {
-		fmt.Println("\nDry run mode - not committing")
+		ui.ShowInfo("Dry run mode - not committing")
 		return nil
 	}
 
 	// Ask for confirmation unless auto-commit is enabled
 	if !autoCommit {
-		fmt.Print("\nDo you want to commit with this message? [y/N]: ")
+		fmt.Print(formatter.FormatConfirmation())
 		reader := bufio.NewReader(os.Stdin)
 		response, err := reader.ReadString('\n')
 		if err != nil {
-			return fmt.Errorf("failed to read user input: %w", err)
+			ui.ShowError("Failed to read user input: " + err.Error())
+			return err
 		}
 
 		response = strings.ToLower(strings.TrimSpace(response))
 		if response != "y" && response != "yes" {
-			fmt.Println("Commit cancelled")
+			ui.ShowInfo("Commit cancelled")
 			return nil
 		}
 	}
 
 	// Commit the changes
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Committing changes...\n")
+		ui.ShowInfo("Committing changes...")
 	}
 
 	commitCmd := fmt.Sprintf(`git commit -m %q`, message)
 	if err := runShellCommand(ctx, commitCmd); err != nil {
-		return fmt.Errorf("failed to commit: %w", err)
+		ui.ShowError("Failed to commit: " + err.Error())
+		return err
 	}
 
-	fmt.Println("✓ Changes committed successfully!")
+	ui.ShowSuccess("Changes committed successfully!")
 	return nil
 }
 

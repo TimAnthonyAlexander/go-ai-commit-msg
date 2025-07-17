@@ -6,7 +6,7 @@ import (
 	"gh-smart-commit/pkg/git"
 	"gh-smart-commit/pkg/ollama"
 	"gh-smart-commit/pkg/prompt"
-	"os"
+	"gh-smart-commit/pkg/ui"
 	"regexp"
 	"strconv"
 	"strings"
@@ -63,9 +63,11 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 	// Check if we're in a Git repository
 	isGit, err := repo.IsInsideWorkTree(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check if inside Git repository: %w", err)
+		ui.ShowError("Failed to check if inside Git repository: " + err.Error())
+		return err
 	}
 	if !isGit {
+		ui.ShowError("Not inside a Git repository")
 		return fmt.Errorf("not inside a Git repository")
 	}
 
@@ -76,22 +78,26 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 	if analyzeStaged {
 		diff, err = repo.GetStagedDiff(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get staged diff: %w", err)
+			ui.ShowError("Failed to get staged diff: " + err.Error())
+			return err
 		}
 		diffType = "staged"
 	} else {
 		diff, err = repo.GetUnstagedDiff(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get unstaged diff: %w", err)
+			ui.ShowError("Failed to get unstaged diff: " + err.Error())
+			return err
 		}
 		diffType = "unstaged"
 	}
 
 	if strings.TrimSpace(diff) == "" {
 		if analyzeStaged {
-			return fmt.Errorf("no staged changes found. Please stage your changes with 'git add' first")
+			ui.ShowWarning("No staged changes found. Please stage your changes with 'git add' first")
+			return fmt.Errorf("no staged changes found")
 		} else {
-			return fmt.Errorf("no unstaged changes found. Please make some changes first")
+			ui.ShowWarning("No unstaged changes found. Please make some changes first")
+			return fmt.Errorf("no unstaged changes found")
 		}
 	}
 
@@ -99,12 +105,16 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 	repoName, _ := repo.GetRepoName(ctx)
 	branch, _ := repo.GetCurrentBranch(ctx)
 
+	// Show context info if verbose
+	contextFormatter := ui.NewContextFormatter()
+	if info := contextFormatter.FormatRepoInfo(repoName, branch, verbose); info != "" {
+		fmt.Print(info)
+	}
+
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Repository: %s\n", repoName)
-		fmt.Fprintf(os.Stderr, "Branch: %s\n", branch)
-		fmt.Fprintf(os.Stderr, "Analyzing: %s changes\n", diffType)
-		fmt.Fprintf(os.Stderr, "Diff length: %d lines\n", len(strings.Split(diff, "\n")))
-		fmt.Fprintf(os.Stderr, "Severity filter: %s\n", severityFilter)
+		diffLines := len(strings.Split(diff, "\n"))
+		ui.ShowInfo(fmt.Sprintf("Analyzing %s changes (%d lines)", diffType, diffLines))
+		ui.ShowInfo(fmt.Sprintf("Severity filter: %s", severityFilter))
 	}
 
 	// Build prompt
@@ -117,11 +127,12 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 
 	systemPrompt, userPrompt, err := builder.Build("lint-suggestions", promptCtx)
 	if err != nil {
-		return fmt.Errorf("failed to build prompt: %w", err)
+		ui.ShowError("Failed to build prompt: " + err.Error())
+		return err
 	}
 
 	if verbose {
-		fmt.Fprintf(os.Stderr, "Sending request to Ollama...\n")
+		ui.ShowInfo("Sending request to Ollama...")
 	}
 
 	// Create Ollama client
@@ -134,7 +145,8 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 
 	// Test connection
 	if err := client.Ping(ctx); err != nil {
-		return fmt.Errorf("failed to connect to Ollama at %s: %w", ollamaHost, err)
+		ui.ShowError(fmt.Sprintf("Failed to connect to Ollama at %s: %s", ollamaHost, err.Error()))
+		return err
 	}
 
 	// Prepare chat request
@@ -149,8 +161,10 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Stream response
-	fmt.Printf("Analyzing %s changes for improvement suggestions", diffType)
+	// Create beautiful streaming spinner
+	spinner := ui.NewStreamingSpinner(fmt.Sprintf("🔍 Analyzing %s changes for improvements", diffType))
+	spinner.Start()
+
 	respChan, errChan := client.Chat(ctx, chatReq)
 
 	var responseBuilder strings.Builder
@@ -162,7 +176,7 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 			if !ok {
 				goto StreamComplete
 			}
-			fmt.Print(".")
+			spinner.Update()
 			responseBuilder.WriteString(resp.Message.Content)
 
 		case err := <-errChan:
@@ -175,14 +189,16 @@ func runLintSuggestions(cmd *cobra.Command, args []string) error {
 	}
 
 StreamComplete:
-	fmt.Println() // New line after dots
+	spinner.Stop()
 
 	if streamErr != nil {
-		return fmt.Errorf("failed to generate suggestions: %w", streamErr)
+		ui.ShowError("Failed to generate suggestions: " + streamErr.Error())
+		return streamErr
 	}
 
 	response := strings.TrimSpace(responseBuilder.String())
 	if response == "" {
+		ui.ShowWarning("No suggestions generated")
 		return fmt.Errorf("no suggestions generated")
 	}
 
@@ -197,27 +213,27 @@ StreamComplete:
 		filteredSuggestions = filteredSuggestions[:maxSuggestions]
 	}
 
-	// Display suggestions
-	if len(filteredSuggestions) == 0 {
-		fmt.Printf("No suggestions found matching severity filter: %s\n", severityFilter)
-		return nil
+	// Display suggestions beautifully
+	formatter := ui.NewSuggestionFormatter()
+
+	// Convert to UI suggestions format
+	uiSuggestions := make([]ui.Suggestion, len(filteredSuggestions))
+	for i, s := range filteredSuggestions {
+		uiSuggestions[i] = ui.Suggestion{
+			Severity:    s.Severity,
+			Title:       s.Title,
+			Description: s.Description,
+			Number:      s.Number,
+		}
 	}
 
-	fmt.Printf("\n📋 Code Improvement Suggestions (%s changes):\n", diffType)
-	fmt.Println("─────────────────────────────────────────────")
+	output := formatter.FormatSuggestionsList(uiSuggestions, diffType, len(suggestions))
+	fmt.Print(output)
 
-	for i, suggestion := range filteredSuggestions {
-		displaySuggestion(i+1, suggestion)
-	}
-
-	fmt.Printf("\n💡 Found %d suggestions", len(filteredSuggestions))
-	if len(suggestions) > len(filteredSuggestions) {
-		fmt.Printf(" (filtered from %d total)", len(suggestions))
-	}
+	// Show additional info about filtering
 	if severityFilter != "all" {
-		fmt.Printf(" matching severity: %s", severityFilter)
+		ui.ShowInfo(fmt.Sprintf("Showing only %s severity suggestions", strings.ToUpper(severityFilter)))
 	}
-	fmt.Println()
 
 	return nil
 }
@@ -330,42 +346,4 @@ func filterSuggestionsBySeverity(suggestions []Suggestion, severityFilter string
 	}
 
 	return filtered
-}
-
-// displaySuggestion displays a single suggestion with color coding
-func displaySuggestion(number int, suggestion Suggestion) {
-	// Color codes for different severities
-	var color string
-	var icon string
-
-	switch suggestion.Severity {
-	case "HIGH":
-		color = "\033[31m" // Red
-		icon = "🔴"
-	case "MEDIUM":
-		color = "\033[33m" // Yellow
-		icon = "🟡"
-	case "LOW":
-		color = "\033[32m" // Green
-		icon = "🟢"
-	default:
-		color = "\033[37m" // White
-		icon = "⚪"
-	}
-
-	reset := "\033[0m"
-
-	// Check if NO_COLOR environment variable is set
-	if os.Getenv("NO_COLOR") != "" {
-		color = ""
-		reset = ""
-		icon = ""
-	}
-
-	fmt.Printf("\n%s%d. %s[%s]%s %s\n",
-		color, number, icon, suggestion.Severity, reset, suggestion.Title)
-
-	if suggestion.Description != "" {
-		fmt.Printf("   %s\n", suggestion.Description)
-	}
 }
