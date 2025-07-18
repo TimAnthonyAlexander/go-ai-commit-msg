@@ -28,6 +28,12 @@ branch-describe:
   base-branch: "main"     # Base branch to compare against
   include-stats: true     # Include diff statistics in analysis
 
+bash:
+  auto-execute: false     # Auto-execute commands without confirmation (dangerous!)
+  include-file-tree: true # Include file tree in system context
+  max-tree-depth: 2       # Maximum depth for file tree scanning
+  max-tree-files: 15      # Maximum files to include in tree context
+
 tag-suggest:
   max-tags: 5             # Maximum number of tags to suggest
   validate-only: false    # Only suggest from allowed tags list

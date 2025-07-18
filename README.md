@@ -33,6 +33,7 @@
 | 🧠 **Smart Commit Messages** | ✅ **Ready** | Generate conventional commit messages from staged changes |
 | 🔍 **Code Suggestions** | ✅ **Ready** | Get AI-powered improvement suggestions with severity levels |
 | 📝 **Branch Descriptions** | ✅ **Ready** | Automatically describe what your branch accomplishes |
+| 💻 **Bash Commands** | ✅ **Ready** | Generate and execute bash commands from natural language descriptions |
 | 🏷️ **Tag Suggestions** | 🚧 **Coming Soon** | Get relevant tags/labels for your changes |
 
 ### 🛡️ Privacy & Security
@@ -226,6 +227,61 @@ Key Changes:
 
 Statistics: 15 files changed, 847 additions, 23 deletions
 ─────────────────────────
+
+---
+
+### 💻 `bash` - Intelligent Command Generation
+
+*Transform natural language descriptions into safe, efficient bash commands*
+
+```bash
+gh-smart-commit bash [description]
+```
+
+**✨ What it does:**
+- Analyzes your request with full system context
+- Generates appropriate bash commands for your environment
+- Considers current directory, git status, and system architecture
+- Prioritizes safety with interactive confirmations
+- Uses standard Unix/Linux tools when possible
+
+**🛠️ Flags:**
+```bash
+--dry-run           Show generated command without executing
+--auto-execute      Execute command without confirmation (dangerous!)
+```
+
+**📖 Examples:**
+```bash
+$ gh-smart-commit bash "list all Go files in this project"
+
+🧠 Generating bash command...
+
+Generated bash command:
+─────────────────────────
+find . -name "*.go" -type f
+─────────────────────────
+
+Do you want to execute this command? [y/N]: y
+✓ Command executed successfully!
+
+$ gh-smart-commit bash "create a backup of the src directory"
+
+🧠 Generating bash command...
+
+Generated bash command:
+─────────────────────────
+tar -czf src_backup_$(date +%Y%m%d_%H%M%S).tar.gz src/
+─────────────────────────
+
+$ gh-smart-commit bash "find files larger than 10MB" --dry-run
+
+Generated bash command:
+─────────────────────────
+find . -type f -size +10M -exec ls -lh {} \;
+─────────────────────────
+
+Dry run mode - not executing command
 ```
 
 ---
@@ -274,6 +330,12 @@ branch-describe:
   commits: 10
   base-branch: "main"
   cache-ttl: "24h"            # Cache descriptions for 24 hours
+
+# 💻 Bash Commands
+bash:
+  auto-execute: false         # Auto-execute without confirmation (dangerous!)
+  include-file-tree: true     # Include file tree in system context
+  max-tree-depth: 2           # Maximum depth for file tree scanning
 ```
 
 ### 🌿 Environment Variables
@@ -346,6 +408,22 @@ gh-smart-commit lint-suggestions --severity high
 gh-smart-commit branch-describe
 
 # Perfect PR description generated ✨
+```
+
+### 💻 The "I Need To Do Something But Don't Remember The Command"
+
+```bash
+# You: "I need to find all the TypeScript files that were modified in the last week"
+gh-smart-commit bash "find TypeScript files modified in the last week"
+
+# AI: "find . -name '*.ts' -mtime -7 -type f"
+# You: y
+
+# You: "Create a compressed backup of my entire project excluding node_modules"
+gh-smart-commit bash "backup this project but skip node_modules and git files"
+
+# AI: "tar --exclude='node_modules' --exclude='.git' -czf project_backup_$(date +%Y%m%d).tar.gz ."
+# You: 🤯 *mind blown by the perfect command*
 ```
 
 ---

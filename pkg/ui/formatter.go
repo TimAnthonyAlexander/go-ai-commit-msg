@@ -47,6 +47,47 @@ func (f *CommitMessageFormatter) FormatConfirmation() string {
 	return fmt.Sprintf("\n%s %s: ", prompt, options)
 }
 
+// BashCommandFormatter handles formatting bash commands beautifully
+type BashCommandFormatter struct{}
+
+// NewBashCommandFormatter creates a new bash command formatter
+func NewBashCommandFormatter() *BashCommandFormatter {
+	return &BashCommandFormatter{}
+}
+
+// FormatGenerated formats a generated bash command with beautiful styling
+func (f *BashCommandFormatter) FormatGenerated(command string) string {
+	if IsNoColor() {
+		return fmt.Sprintf(`
+Generated bash command:
+─────────────────────────
+%s
+─────────────────────────`, command)
+	}
+
+	header := HeaderStyle.Render("🧠 Generated Bash Command")
+	separator := CreateSeparator(60)
+	commandStyled := CodeStyle.Render(command)
+
+	return fmt.Sprintf("\n%s\n%s\n%s\n%s\n",
+		header,
+		separator,
+		commandStyled,
+		separator)
+}
+
+// FormatConfirmation formats the confirmation prompt for command execution
+func (f *BashCommandFormatter) FormatConfirmation() string {
+	if IsNoColor() {
+		return "\nDo you want to execute this command? [y/N]: "
+	}
+
+	prompt := InfoStyle.Render("Do you want to execute this command?")
+	options := MutedStyle.Render("[y/N]")
+
+	return fmt.Sprintf("\n%s %s: ", prompt, options)
+}
+
 // SuggestionFormatter handles formatting lint suggestions
 type SuggestionFormatter struct{}
 

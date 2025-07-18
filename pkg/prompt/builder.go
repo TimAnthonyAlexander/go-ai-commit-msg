@@ -17,13 +17,15 @@ type Template struct {
 
 // Context holds the context data for prompt templates
 type Context struct {
-	Repo      string
-	Branch    string
-	Diff      string
-	Commits   []git.Commit
-	Rules     []string
-	MaxLength int
-	Style     string
+	Repo        string
+	Branch      string
+	Diff        string
+	Commits     []git.Commit
+	Rules       []string
+	MaxLength   int
+	Style       string
+	Description string      // For bash command descriptions
+	SystemInfo  interface{} // For system context information
 }
 
 // SmartCommitTemplate is the prompt template for generating commit messages
@@ -123,6 +125,56 @@ Recent commits:
 Generate a concise description of what this branch accomplishes:`,
 }
 
+// BashTemplate is the prompt template for generating bash commands
+var BashTemplate = Template{
+	System: `You are an expert system administrator and command-line specialist. Generate safe, efficient bash commands based on user descriptions and system context.
+
+CRITICAL INSTRUCTIONS:
+- Your response must be ONLY the bash command itself
+- NO explanations, NO additional text, NO context
+- NO phrases like "Here is the command:" or "You can use:"
+- NO markdown code blocks or formatting
+- Just the raw bash command and nothing else
+- Ensure the command is safe and appropriate for the given context
+- Use standard Unix/Linux tools when possible
+- Be mindful of the operating system and available tools
+
+SAFETY GUIDELINES:
+- Avoid destructive operations without explicit user intent
+- Use appropriate flags for safety (e.g., -i for interactive confirmations)
+- Prefer relative paths when working within a project
+- Use standard tools available on most systems
+
+EXAMPLE OUTPUT FORMAT:
+find . -name "*.go" -type f
+ls -la | grep "^d"
+tar -czf backup.tar.gz src/
+grep -r "TODO" --include="*.js" .
+
+REMEMBER: 
+- Output ONLY the bash command
+- No explanations or context
+- Make it safe and appropriate for the system`,
+
+	User: `Task: {{.Description}}
+
+System Context:
+- OS: {{.SystemInfo.OS}}
+- Architecture: {{.SystemInfo.Arch}}
+- Working Directory: {{.SystemInfo.WorkingDir}}
+- Shell: {{.SystemInfo.Shell}}
+- User: {{.SystemInfo.User}}
+{{if .SystemInfo.IsGitRepo}}
+- Git Repository: {{.SystemInfo.Repo}}
+- Current Branch: {{.SystemInfo.Branch}}
+{{end}}
+
+Current Directory Structure:
+{{.SystemInfo.FileTree}}
+
+Generate the bash command:`,
+}
+
 // TagSuggestTemplate is the prompt template for suggesting tags
 var TagSuggestTemplate = Template{
 	System: `You are an expert at categorizing and tagging code changes. Analyze the provided changes and suggest relevant tags or labels.
@@ -161,6 +213,7 @@ func NewBuilder() *Builder {
 			"smart-commit":     SmartCommitTemplate,
 			"lint-suggestions": LintSuggestionsTemplate,
 			"branch-describe":  BranchDescribeTemplate,
+			"bash":             BashTemplate,
 			"tag-suggest":      TagSuggestTemplate,
 		},
 	}
@@ -229,22 +282,66 @@ func ValidateCommitMessage(message string) error {
 
 // SanitizeCommitMessage cleans up a generated commit message
 func SanitizeCommitMessage(message string) string {
-	// Remove leading/trailing whitespace
-	message = strings.TrimSpace(message)
+	// Remove common AI prefixes and cleanup
+	prefixes := []string{
+		"Here is the commit message:",
+		"Commit message:",
+		"The commit message is:",
+		"Here's the commit message:",
+		"```",
+	}
 
-	// Remove common prefixes that LLMs might add
-	prefixes := []string{"Commit message:", "Here's the commit message:", "The commit message is:"}
+	cleaned := strings.TrimSpace(message)
 	for _, prefix := range prefixes {
-		if strings.HasPrefix(message, prefix) {
-			message = strings.TrimSpace(strings.TrimPrefix(message, prefix))
+		if strings.HasPrefix(cleaned, prefix) {
+			cleaned = strings.TrimSpace(strings.TrimPrefix(cleaned, prefix))
 		}
 	}
 
-	// Remove quotes if the entire message is quoted
-	if (strings.HasPrefix(message, `"`) && strings.HasSuffix(message, `"`)) ||
-		(strings.HasPrefix(message, "`") && strings.HasSuffix(message, "`")) {
-		message = message[1 : len(message)-1]
+	// Remove trailing punctuation like quotes or backticks
+	cleaned = strings.Trim(cleaned, "`\"'")
+
+	return strings.TrimSpace(cleaned)
+}
+
+// SanitizeBashCommand cleans up a generated bash command
+func SanitizeBashCommand(command string) string {
+	// Remove common AI prefixes and cleanup
+	prefixes := []string{
+		"Here is the command:",
+		"The command is:",
+		"Here's the command:",
+		"You can use:",
+		"Try this:",
+		"Run:",
+		"Execute:",
+		"```bash",
+		"```sh",
+		"```",
+		"$",
+		"# ",
 	}
 
-	return strings.TrimSpace(message)
+	cleaned := strings.TrimSpace(command)
+
+	// Remove prefixes
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(cleaned, prefix) {
+			cleaned = strings.TrimSpace(strings.TrimPrefix(cleaned, prefix))
+		}
+	}
+
+	// Remove markdown code block endings
+	cleaned = strings.TrimSuffix(cleaned, "```")
+
+	// If it's a multi-line response, take only the first line that looks like a command
+	lines := strings.Split(cleaned, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "//") {
+			return line
+		}
+	}
+
+	return strings.TrimSpace(cleaned)
 }
