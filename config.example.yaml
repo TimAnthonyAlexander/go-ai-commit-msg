@@ -4,7 +4,7 @@
 # Ollama settings
 ollama:
   host: "127.0.0.1:11434"  # Ollama server host:port
-  model: "llama3:8b"       # Model to use for AI generation
+  model: "llama3.1:8b"       # Model to use for AI generation
   temperature: 0.3         # Temperature for model output (0.0-1.0)
 
 # Global settings
