@@ -125,7 +125,7 @@ func runBash(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create beautiful streaming spinner
-	spinner := ui.NewStreamingSpinner("🧠 Generating bash command")
+	spinner := ui.NewStreamingSpinner("Generating...")
 	spinner.Start()
 
 	respChan, errChan := client.Chat(ctx, chatReq)
@@ -203,7 +203,6 @@ StreamComplete:
 		return err
 	}
 
-	ui.ShowSuccess("Command executed successfully!")
 	return nil
 }
 

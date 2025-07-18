@@ -59,13 +59,12 @@ func NewBashCommandFormatter() *BashCommandFormatter {
 func (f *BashCommandFormatter) FormatGenerated(command string) string {
 	if IsNoColor() {
 		return fmt.Sprintf(`
-Generated bash command:
 ─────────────────────────
 %s
 ─────────────────────────`, command)
 	}
 
-	header := HeaderStyle.Render("🧠 Generated Bash Command")
+	header := HeaderStyle.Render("Generated Bash Command")
 	separator := CreateSeparator(60)
 	commandStyled := CodeStyle.Render(command)
 
